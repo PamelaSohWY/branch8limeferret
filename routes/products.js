@@ -14,13 +14,85 @@ const {
 } = require('../models');
 
 router.get('/', async (req, res) => {
-    // same as: select * from products
-    let products = await Product.collection().fetch({
-        'withRelated':['category', 'tags']
+
+    const categories = await Category.fetchAll().map((category) => {
+        return [category.get('id'), category.get('name')]
     });
-    res.render('products/index', {
-        'products': products.toJSON()
+    categories.unshift([0, "Any categories"])
+
+    const allTags = await Tag.fetchAll().map(tag => [tag.get('id'), tag.get('name')]);
+
+    const searchForm = createSearchForm(categories, allTags);
+
+    // mastery query:
+    let q = Product.collection();
+
+    searchForm.handle(req, {
+        'empty': async (form) => {
+            // same as: select * from products
+            let products = await q.fetch({
+                'withRelated': ['category', 'tags']
+            });
+
+            res.render('products/index', {
+                'products': products.toJSON(),
+                'form': form.toHTML(bootstrapField)
+            })
+        },
+        'error': async(form) => {
+             // same as: select * from products
+             let products = await q.fetch({
+                'withRelated': ['category', 'tags']
+            });
+
+            res.render('products/index', {
+                'products': products.toJSON(),
+                'form': form.toHTML(bootstrapField)
+            })
+        },
+        'success': async(form) => {
+            console.log(form.data);
+            if (form.data.name) {
+                q = q.where('name', 'like', '%' + form.data.name + '%')
+            }
+
+            // only if the form has min_cost filled in
+            if (form.data.min_cost) {
+                q = q.where('cost', '>=', form.data.min_cost);
+            }
+
+            // only if the form has max_cost filled in
+            if (form.data.max_cost) {
+                q = q.where('cost', '<=', form.data.max_cost);
+            }
+
+            if (form.data.category_id && form.data.category_id != "0") {
+                q = q.where('category_id', '=', form.data.category_id);
+            }
+
+            if (form.data.tags) {
+                console.log("Got executed");
+                console.log(form.data.tags.split(','))
+                // select * from products join products_tags on products.id = products_tags.product_id
+                q = q.query('join', 'products_tags', 'products.id', 'product_id')
+                    .where('tag_id', 'in', form.data.tags.split(','))
+            }
+
+            // For debugging:
+            // console.log(q.query().toSQL());
+
+            let products = await q.fetch({
+                withRelated:['category']
+            });
+
+            res.render('products/index', {
+                'products': products.toJSON(),
+                'form': form.toHTML(bootstrapField)
+            })
+        }
     })
+
+
 })
 
 router.get('/create', checkIfAuthenticated, async (req, res) => {
@@ -35,6 +107,8 @@ router.get('/create', checkIfAuthenticated, async (req, res) => {
     for (let category of allCateogries) {
         choices.push([ category.get('id'), category.get('name')])
     }
+
+
 
     // load in all the possible tags
     const allTags = await Tag.fetchAll().map( tag => [tag.get('id'), tag.get('name') ]);

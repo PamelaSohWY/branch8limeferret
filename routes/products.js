@@ -2,7 +2,8 @@ const express = require('express')
 const router = express.Router();
 const {
     bootstrapField,
-    createProductForm
+    createProductForm,
+    createSearchForm 
 } = require('../forms')
 const { checkIfAuthenticated } = require('../middlewares')
 
@@ -82,7 +83,7 @@ router.get('/', async (req, res) => {
             // console.log(q.query().toSQL());
 
             let products = await q.fetch({
-                withRelated:['category']
+                withRelated:['category','tags']
             });
 
             res.render('products/index', {
